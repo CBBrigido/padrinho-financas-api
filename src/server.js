@@ -9,8 +9,22 @@ const categoryRoutes = require("./routes/categories");
 const app = express();
 
 // ── Middlewares ──────────────────────────────────────────────────────────
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  "http://localhost:3000",
+  "http://localhost:3001",
+].filter(Boolean);
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || "http://localhost:3000",
+  origin: (origin, callback) => {
+    // Permite requisições sem origin (ex: apps mobile, Postman)
+    if (!origin) return callback(null, true);
+    // Permite qualquer domínio vercel.app
+    if (/\.vercel\.app$/.test(origin)) return callback(null, true);
+    // Permite origens explicitamente configuradas
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    callback(new Error(`CORS: origem não permitida — ${origin}`));
+  },
   credentials: true,
 }));
 app.use(express.json());
