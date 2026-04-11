@@ -98,8 +98,8 @@ const autoMigrate = async () => {
     for (const [name, color] of defaultCats) {
       await client.query(
         `INSERT INTO categories (name, color, is_default)
-         SELECT $1, $2, true
-         WHERE NOT EXISTS (SELECT 1 FROM categories WHERE name = $1 AND is_default = true)`,
+         SELECT $1::VARCHAR, $2::VARCHAR, true
+         WHERE NOT EXISTS (SELECT 1 FROM categories WHERE name = $1::VARCHAR AND is_default = true)`,
         [name, color]
       );
     }
