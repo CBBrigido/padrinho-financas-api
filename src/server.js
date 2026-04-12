@@ -103,6 +103,27 @@ const autoMigrate = async () => {
     await client.query("CREATE INDEX IF NOT EXISTS idx_tx_user_type ON transactions(user_id, type);");
     await client.query("CREATE INDEX IF NOT EXISTS idx_tx_category ON transactions(category_id);");
 
+    // Atualizar CHECK constraint para aceitar 'reserva' como tipo
+    await client.query(`
+      ALTER TABLE transactions
+        DROP CONSTRAINT IF EXISTS transactions_type_check;
+    `);
+    await client.query(`
+      ALTER TABLE transactions
+        ADD CONSTRAINT transactions_type_check
+        CHECK (type IN ('receita', 'despesa', 'reserva'));
+    `);
+
+    // Migrar transações antigas: despesa com categoria "Reserva" → type='reserva'
+    await client.query(`
+      UPDATE transactions t
+      SET type = 'reserva', category_id = NULL
+      FROM categories c
+      WHERE t.category_id = c.id
+        AND c.name = 'Reserva'
+        AND t.type = 'despesa';
+    `);
+
     // Seed categorias padrão
     const defaultCats = [
       ["Moradia", "#E8575A"], ["Alimentação", "#F4A940"], ["Transporte", "#3EAFC4"],

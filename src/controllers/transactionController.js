@@ -21,7 +21,7 @@ const list = async (req, res) => {
       paramIndex += 2;
     }
 
-    if (type && (type === "receita" || type === "despesa")) {
+    if (type && ["receita", "despesa", "reserva"].includes(type)) {
       query += ` AND t.type = $${paramIndex}`;
       params.push(type);
       paramIndex++;
@@ -74,8 +74,8 @@ const create = async (req, res) => {
       return res.status(400).json({ error: "Tipo, descrição, valor e data são obrigatórios" });
     }
 
-    if (!["receita", "despesa"].includes(type)) {
-      return res.status(400).json({ error: "Tipo deve ser 'receita' ou 'despesa'" });
+    if (!["receita", "despesa", "reserva"].includes(type)) {
+      return res.status(400).json({ error: "Tipo deve ser 'receita', 'despesa' ou 'reserva'" });
     }
 
     if (parseFloat(amount) <= 0) {
@@ -177,11 +177,12 @@ const summary = async (req, res) => {
     const currentYear = parseInt(year) || new Date().getFullYear();
     const currentMonth = parseInt(month) || new Date().getMonth() + 1;
 
-    // Resumo do mês atual
+    // Resumo do mês atual (reserva separada de despesa)
     const monthSummary = await pool.query(
       `SELECT
         COALESCE(SUM(CASE WHEN type = 'receita' THEN amount ELSE 0 END), 0) as total_receita,
-        COALESCE(SUM(CASE WHEN type = 'despesa' THEN amount ELSE 0 END), 0) as total_despesa
+        COALESCE(SUM(CASE WHEN type = 'despesa' THEN amount ELSE 0 END), 0) as total_despesa,
+        COALESCE(SUM(CASE WHEN type = 'reserva' THEN amount ELSE 0 END), 0) as total_reserva
        FROM transactions
        WHERE user_id = $1
          AND EXTRACT(MONTH FROM date) = $2
@@ -189,7 +190,7 @@ const summary = async (req, res) => {
       [req.userId, currentMonth, currentYear]
     );
 
-    // Gastos por categoria no mês
+    // Gastos por categoria (apenas despesas, sem reserva)
     const categoryBreakdown = await pool.query(
       `SELECT c.id, c.name, c.color,
               COALESCE(SUM(t.amount), 0) as total
@@ -199,20 +200,22 @@ const summary = async (req, res) => {
          AND t.type = 'despesa'
          AND EXTRACT(MONTH FROM t.date) = $2
          AND EXTRACT(YEAR FROM t.date) = $3
-       WHERE c.is_default = true OR c.user_id = $1
+       WHERE (c.is_default = true OR c.user_id = $1)
+         AND c.name != 'Reserva'
        GROUP BY c.id, c.name, c.color
        HAVING COALESCE(SUM(t.amount), 0) > 0
        ORDER BY total DESC`,
       [req.userId, currentMonth, currentYear]
     );
 
-    // Comparação últimos N meses
+    // Comparação últimos N meses (inclui reserva)
     const monthlyComparison = await pool.query(
       `SELECT
         EXTRACT(MONTH FROM date) as month,
         EXTRACT(YEAR FROM date) as year,
         COALESCE(SUM(CASE WHEN type = 'receita' THEN amount ELSE 0 END), 0) as total_receita,
-        COALESCE(SUM(CASE WHEN type = 'despesa' THEN amount ELSE 0 END), 0) as total_despesa
+        COALESCE(SUM(CASE WHEN type = 'despesa' THEN amount ELSE 0 END), 0) as total_despesa,
+        COALESCE(SUM(CASE WHEN type = 'reserva' THEN amount ELSE 0 END), 0) as total_reserva
        FROM transactions
        WHERE user_id = $1
          AND date >= (DATE_TRUNC('month', MAKE_DATE($2, $3, 1)) - INTERVAL '${parseInt(months) - 1} months')
@@ -228,8 +231,9 @@ const summary = async (req, res) => {
       current_month: {
         receita: parseFloat(s.total_receita),
         despesa: parseFloat(s.total_despesa),
-        saldo: parseFloat(s.total_receita) - parseFloat(s.total_despesa),
-        over_budget: parseFloat(s.total_despesa) > parseFloat(s.total_receita),
+        reserva: parseFloat(s.total_reserva),
+        saldo: parseFloat(s.total_receita) - parseFloat(s.total_despesa) - parseFloat(s.total_reserva),
+        over_budget: parseFloat(s.total_despesa) + parseFloat(s.total_reserva) > parseFloat(s.total_receita),
       },
       category_breakdown: categoryBreakdown.rows.map((r) => ({
         id: r.id,
@@ -242,6 +246,7 @@ const summary = async (req, res) => {
         year: parseInt(r.year),
         receita: parseFloat(r.total_receita),
         despesa: parseFloat(r.total_despesa),
+        reserva: parseFloat(r.total_reserva),
       })),
     });
   } catch (err) {
