@@ -107,7 +107,7 @@ const autoMigrate = async () => {
     const defaultCats = [
       ["Moradia", "#E8575A"], ["Alimentação", "#F4A940"], ["Transporte", "#3EAFC4"],
       ["Lazer", "#9B6DD7"], ["Saúde", "#4ACA8B"], ["Educação", "#5B8DEF"],
-      ["Serviços", "#E87BAF"], ["Outros", "#8E99A9"],
+      ["Serviços", "#E87BAF"], ["Outros", "#8E99A9"], ["Reserva", "#FBBF24"],
     ];
     for (const [name, color] of defaultCats) {
       await client.query(
