@@ -1,8 +1,9 @@
 const pool = require("../config/database");
 
 // GET /api/transactions?month=4&year=2026&category=moradia&type=despesa
+// GET /api/transactions?start_date=2026-01-15&end_date=2026-02-15
 const list = async (req, res) => {
-  const { month, year, category, type } = req.query;
+  const { month, year, category, type, start_date, end_date } = req.query;
 
   try {
     let query = `
@@ -14,7 +15,11 @@ const list = async (req, res) => {
     const params = [req.userId];
     let paramIndex = 2;
 
-    if (month && year) {
+    if (start_date && end_date) {
+      query += ` AND t.date >= $${paramIndex} AND t.date <= $${paramIndex + 1}`;
+      params.push(start_date, end_date);
+      paramIndex += 2;
+    } else if (month && year) {
       query += ` AND EXTRACT(MONTH FROM t.date) = $${paramIndex}
                  AND EXTRACT(YEAR FROM t.date) = $${paramIndex + 1}`;
       params.push(parseInt(month), parseInt(year));
